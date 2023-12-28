@@ -1,14 +1,17 @@
 use clap::Parser;
 use color_eyre::{eyre::Context, Result};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(Parser, Debug)]
 struct Arguments {
-    #[clap(long, default_value = "151.217.111.34")]
+    #[clap(long, default_value = "151.217.15.90")]
     host: String,
-    #[clap(long, default_value = "1234")]
+    #[clap(long, default_value = "1337")]
     port: u16,
 }
 
@@ -26,8 +29,10 @@ async fn main() -> Result<()> {
 
     info!("connected, sending data ...");
     stream
-        .write_all(b"hello world!")
+        .write_all(b"SIZE\n")
         .await
         .wrap_err("failed to write data")?;
+    let ans = stream.read_u8().await?;
+    dbg!(ans);
     Ok(())
 }
