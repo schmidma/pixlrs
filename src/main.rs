@@ -1,8 +1,12 @@
 use clap::Parser;
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
 use image::io::Reader as ImageReader;
 use tokio::{
-    io::AsyncWriteExt,
+    io::AsyncBufReadExt,
+    io::{AsyncWriteExt, BufReader},
     net::{TcpStream, ToSocketAddrs},
 };
 use tracing::{info, Level};
@@ -16,14 +20,14 @@ struct Arguments {
     port: u16,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 struct Position {
     x: usize,
     y: usize,
 }
 
 struct PixelFlut {
-    stream: TcpStream,
+    stream: BufReader<TcpStream>,
 }
 
 impl PixelFlut {
@@ -31,7 +35,9 @@ impl PixelFlut {
         let stream = TcpStream::connect(address)
             .await
             .wrap_err("failed to connect socket")?;
-        Ok(Self { stream })
+        Ok(Self {
+            stream: BufReader::new(stream),
+        })
     }
 
     async fn set_pixel(&mut self, position: Position, color: &image::Rgb<u8>) -> Result<()> {
@@ -43,9 +49,25 @@ impl PixelFlut {
         Ok(())
     }
 
-    // async fn get_size(&mut self) -> Result<Position> {
-    //     let resonse = self.tcp_stream.write_all(b"SIZE\n").await?;
-    // }
+    async fn set_offset(&mut self, position: Position) -> Result<()> {
+        let command_string = format!("OFFSET {} {}\n", position.x, position.y);
+        self.stream.write_all(command_string.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn get_size(&mut self) -> Result<Position> {
+        self.stream.write_all(b"SIZE\n").await?;
+        let mut response = String::with_capacity(15);
+        self.stream.read_line(&mut response).await?;
+        let mut iter = response.split_whitespace();
+        iter.next();
+        let x_string = iter.next().wrap_err("cannot split x string")?;
+        let y_string = iter.next().wrap_err("cannot split x string")?;
+        Ok(Position {
+            x: x_string.parse()?,
+            y: y_string.parse()?,
+        })
+    }
 }
 
 #[tokio::main]
