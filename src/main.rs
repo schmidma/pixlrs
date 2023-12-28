@@ -31,6 +31,13 @@ struct PixelFlut {
     stream: TcpStream,
 }
 
+fn pixel_command(position: Position, color: &image::Rgb<u8>) -> String {
+    format!(
+        "PX {} {} {:02x}{:02x}{:02x}\n",
+        position.x, position.y, color[0], color[1], color[2]
+    )
+}
+
 impl PixelFlut {
     fn new(address: impl ToSocketAddrs) -> Result<Self> {
         let stream = TcpStream::connect(address).wrap_err("failed to connect socket")?;
@@ -49,6 +56,11 @@ impl PixelFlut {
     fn set_offset(&mut self, position: Position) -> Result<()> {
         let command_string = format!("OFFSET {} {}\n", position.x, position.y);
         self.stream.write_all(command_string.as_bytes())?;
+        Ok(())
+    }
+
+    fn send_raw(&mut self, command: &str) -> Result<()> {
+        self.stream.write_all(command.as_bytes())?;
         Ok(())
     }
 
@@ -86,6 +98,10 @@ fn main() -> Result<()> {
         .filter(|(_, _, color)| color[1] > 0)
         .collect();
     indices.shuffle(&mut rng);
+    let commands: String = indices
+        .into_iter()
+        .map(|(x, y, color)| pixel_command(Position { x, y }, color))
+        .collect();
 
     let size = connection.get_size()?;
     connection.set_offset(Position {
@@ -93,9 +109,7 @@ fn main() -> Result<()> {
         y: size.y - img.height() - 120,
     })?;
     loop {
-        for (x, y, color) in &indices {
-            connection.set_pixel(Position { x: *x, y: *y }, color)?;
-        }
+        connection.send_raw(&commands)?;
         println!("done")
     }
 }
