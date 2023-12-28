@@ -4,7 +4,7 @@ use color_eyre::{
     Result,
 };
 use image::io::Reader as ImageReader;
-use rand::{distributions::Uniform, thread_rng, Rng};
+use rand::{seq::SliceRandom, thread_rng};
 use tokio::{
     io::AsyncBufReadExt,
     io::{AsyncWriteExt, BufReader},
@@ -23,8 +23,8 @@ struct Arguments {
 
 #[derive(Clone, Copy, Default, Debug)]
 struct Position {
-    x: usize,
-    y: usize,
+    x: u32,
+    y: u32,
 }
 
 struct PixelFlut {
@@ -84,17 +84,23 @@ async fn main() -> Result<()> {
     let img = ImageReader::open("img/hulks.png")?.decode()?.to_rgb8();
 
     let mut rng = thread_rng();
+
+    let mut indices: Vec<_> = img
+        .enumerate_pixels()
+        .filter(|(_, _, color)| color[1] > 0)
+        .collect();
+    indices.shuffle(&mut rng);
+
+    let size = connection.get_size().await?;
+    connection.set_offset(Position {
+        x: 0,
+        y: size.y / 2 - img.height() / 2,
+    }).await?;
     loop {
-        let x = rng.sample(Uniform::new(0, img.width()));
-        let y = rng.sample(Uniform::new(0, img.height()));
-        connection
-            .set_pixel(
-                Position {
-                    x: x as usize,
-                    y: y as usize + 300,
-                },
-                img.get_pixel(x, y),
-            )
-            .await?;
+        for (x, y, color) in &indices {
+            connection
+                .set_pixel(Position { x: *x, y: *y }, color)
+                .await?;
+        }
     }
 }
