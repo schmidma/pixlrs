@@ -89,7 +89,9 @@ fn main() -> Result<()> {
     info!("connecting to {server_address} ...");
     let mut connection = PixelFlut::new(server_address)?;
     info!("connected");
-    let img = ImageReader::open("img/hulks_50.png")?.decode()?.to_rgb8();
+    let img = ImageReader::open("img/hulks_outlined_small.png")?
+        .decode()?
+        .to_rgb8();
 
     let mut rng = thread_rng();
 
