@@ -1,4 +1,4 @@
-use clap::{builder::styling::RgbColor, Parser};
+use clap::Parser;
 use color_eyre::{eyre::Context, Result};
 use image::io::Reader as ImageReader;
 use tokio::{
