@@ -1,3 +1,8 @@
+use std::{
+    io::{BufRead, BufReader, Write},
+    net::{TcpStream, ToSocketAddrs},
+};
+
 use clap::Parser;
 use color_eyre::{
     eyre::{Context, ContextCompat},
@@ -5,11 +10,6 @@ use color_eyre::{
 };
 use image::io::Reader as ImageReader;
 use rand::{seq::SliceRandom, thread_rng};
-use tokio::{
-    io::AsyncBufReadExt,
-    io::{AsyncWriteExt, BufReader},
-    net::{TcpStream, ToSocketAddrs},
-};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -28,38 +28,35 @@ struct Position {
 }
 
 struct PixelFlut {
-    stream: BufReader<TcpStream>,
+    stream: TcpStream,
 }
 
 impl PixelFlut {
-    async fn new(address: impl ToSocketAddrs) -> Result<Self> {
-        let stream = TcpStream::connect(address)
-            .await
-            .wrap_err("failed to connect socket")?;
-        Ok(Self {
-            stream: BufReader::new(stream),
-        })
+    fn new(address: impl ToSocketAddrs) -> Result<Self> {
+        let stream = TcpStream::connect(address).wrap_err("failed to connect socket")?;
+        Ok(Self { stream })
     }
 
-    async fn set_pixel(&mut self, position: Position, color: &image::Rgb<u8>) -> Result<()> {
+    fn set_pixel(&mut self, position: Position, color: &image::Rgb<u8>) -> Result<()> {
         let command_string = format!(
             "PX {} {} {:02x}{:02x}{:02x}\n",
             position.x, position.y, color[0], color[1], color[2]
         );
-        self.stream.write_all(command_string.as_bytes()).await?;
+        self.stream.write_all(command_string.as_bytes())?;
         Ok(())
     }
 
-    async fn set_offset(&mut self, position: Position) -> Result<()> {
+    fn set_offset(&mut self, position: Position) -> Result<()> {
         let command_string = format!("OFFSET {} {}\n", position.x, position.y);
-        self.stream.write_all(command_string.as_bytes()).await?;
+        self.stream.write_all(command_string.as_bytes())?;
         Ok(())
     }
 
-    async fn get_size(&mut self) -> Result<Position> {
-        self.stream.write_all(b"SIZE\n").await?;
+    fn get_size(&mut self) -> Result<Position> {
+        self.stream.write_all(b"SIZE\n")?;
         let mut response = String::with_capacity(15);
-        self.stream.read_line(&mut response).await?;
+        let mut reader = BufReader::new(&mut self.stream);
+        reader.read_line(&mut response)?;
         let mut iter = response.split_whitespace();
         iter.next();
         let x_string = iter.next().wrap_err("cannot split x string")?;
@@ -71,15 +68,14 @@ impl PixelFlut {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let arguments = Arguments::parse();
     FmtSubscriber::builder().with_max_level(Level::DEBUG).init();
 
     let server_address = format!("{}:{}", arguments.host, arguments.port);
 
     info!("connecting to {server_address} ...");
-    let mut connection = PixelFlut::new(server_address).await?;
+    let mut connection = PixelFlut::new(server_address)?;
     info!("connected");
     let img = ImageReader::open("img/hulks.png")?.decode()?.to_rgb8();
 
@@ -91,16 +87,14 @@ async fn main() -> Result<()> {
         .collect();
     indices.shuffle(&mut rng);
 
-    let size = connection.get_size().await?;
+    let size = connection.get_size()?;
     connection.set_offset(Position {
         x: 0,
         y: size.y / 2 - img.height() / 2,
-    }).await?;
+    })?;
     loop {
         for (x, y, color) in &indices {
-            connection
-                .set_pixel(Position { x: *x, y: *y }, color)
-                .await?;
+            connection.set_pixel(Position { x: *x, y: *y }, color)?;
         }
     }
 }
