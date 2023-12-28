@@ -1,5 +1,6 @@
-use clap::Parser;
+use clap::{builder::styling::RgbColor, Parser};
 use color_eyre::{eyre::Context, Result};
+use image::io::Reader as ImageReader;
 use tokio::{
     io::AsyncWriteExt,
     net::{TcpStream, ToSocketAddrs},
@@ -13,25 +14,6 @@ struct Arguments {
     host: String,
     #[clap(long, default_value = "1337")]
     port: u16,
-}
-
-#[derive(Clone, Copy, Default)]
-struct Color {
-    red: u8,
-    green: u8,
-    blue: u8,
-}
-
-impl Color {
-    const WHITE: Self = Self {
-        red: 255,
-        green: 255,
-        blue: 255,
-    };
-
-    fn new(red: u8, green: u8, blue: u8) -> Self {
-        Self { red, green, blue }
-    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -52,10 +34,10 @@ impl PixelFlut {
         Ok(Self { stream })
     }
 
-    async fn set_pixel(&mut self, position: Position, color: Color) -> Result<()> {
+    async fn set_pixel(&mut self, position: Position, color: &image::Rgb<u8>) -> Result<()> {
         let command_string = format!(
             "PX {} {} {:02x}{:02x}{:02x}\n",
-            position.x, position.y, color.red, color.green, color.blue
+            position.x, position.y, color[0], color[1], color[2]
         );
         self.stream.write_all(command_string.as_bytes()).await?;
         Ok(())
@@ -76,15 +58,19 @@ async fn main() -> Result<()> {
     info!("connecting to {server_address} ...");
     let mut connection = PixelFlut::new(server_address).await?;
     info!("connected");
+    let img = ImageReader::open("img/hulks.png")?.decode()?.to_rgb8();
 
     loop {
-        for x in 100..200 {
-            for y in 100..200 {
-                info!("setting");
-                connection
-                    .set_pixel(Position { x, y }, Color::WHITE)
-                    .await?;
-            }
+        for (x, y, pixel) in img.enumerate_pixels() {
+            connection
+                .set_pixel(
+                    Position {
+                        x: x as usize,
+                        y: y as usize,
+                    },
+                    pixel,
+                )
+                .await?;
         }
     }
 }
