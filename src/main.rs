@@ -4,6 +4,7 @@ use color_eyre::{
     Result,
 };
 use image::io::Reader as ImageReader;
+use rand::{distributions::Uniform, thread_rng, Rng};
 use tokio::{
     io::AsyncBufReadExt,
     io::{AsyncWriteExt, BufReader},
@@ -82,17 +83,18 @@ async fn main() -> Result<()> {
     info!("connected");
     let img = ImageReader::open("img/hulks.png")?.decode()?.to_rgb8();
 
+    let mut rng = thread_rng();
     loop {
-        for (x, y, pixel) in img.enumerate_pixels() {
-            connection
-                .set_pixel(
-                    Position {
-                        x: x as usize,
-                        y: y as usize,
-                    },
-                    pixel,
-                )
-                .await?;
-        }
+        let x = rng.sample(Uniform::new(0, img.width()));
+        let y = rng.sample(Uniform::new(0, img.height()));
+        connection
+            .set_pixel(
+                Position {
+                    x: x as usize,
+                    y: y as usize + 300,
+                },
+                img.get_pixel(x, y),
+            )
+            .await?;
     }
 }
