@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     info!("connecting to {server_address} ...");
     let mut connection = PixelFlut::new(server_address)?;
     info!("connected");
-    let img = ImageReader::open("img/hulks.png")?.decode()?.to_rgb8();
+    let img = ImageReader::open("img/hulks_50.png")?.decode()?.to_rgb8();
 
     let mut rng = thread_rng();
 
@@ -89,12 +89,13 @@ fn main() -> Result<()> {
 
     let size = connection.get_size()?;
     connection.set_offset(Position {
-        x: 0,
-        y: size.y / 2 - img.height() / 2,
+        x: size.x - img.width(),
+        y: size.y - img.height() - 120,
     })?;
     loop {
         for (x, y, color) in &indices {
             connection.set_pixel(Position { x: *x, y: *y }, color)?;
         }
+        println!("done")
     }
 }
