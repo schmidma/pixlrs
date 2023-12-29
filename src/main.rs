@@ -8,15 +8,18 @@ use clap::Parser;
 use color_eyre::{eyre::Context, Result};
 use image::io::Reader as ImageReader;
 use protocol::Vec2;
-use rand::{seq::SliceRandom, thread_rng};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use crate::{fps_counter::AveragingFpsCounter, std_tcp_protocol::StdTcpProtocol};
+use crate::{
+    fps_counter::AveragingFpsCounter, shuffle_and_loop::ShuffleAndLoop,
+    std_tcp_protocol::StdTcpProtocol,
+};
 
 mod canvas;
 mod fps_counter;
 mod protocol;
+mod shuffle_and_loop;
 mod std_tcp_protocol;
 
 #[derive(Parser, Debug)]
@@ -41,13 +44,6 @@ fn main() -> Result<()> {
         .wrap_err("failed to decode image")?
         .to_rgb8();
 
-    let mut rng = thread_rng();
-    let mut indices: Vec<_> = image
-        .enumerate_pixels()
-        .filter(|(_, _, color)| color[1] > 0)
-        .collect();
-    indices.shuffle(&mut rng);
-
     let server_address = format!("{}:{}", arguments.host, arguments.port);
     info!("connecting to pixelflut server at {} ...", server_address);
     let protocol =
@@ -66,12 +62,14 @@ fn main() -> Result<()> {
     canvas.offset = offset;
     info!("set canvas offset to {:?}", offset);
 
+    let strategy = ShuffleAndLoop::new(&image);
+
     let fps_log_interval = Duration::from_secs(arguments.fps_log_interval);
     let mut fps_counter = AveragingFpsCounter::new(fps_log_interval);
     let mut last_time_log = Instant::now();
 
     loop {
-        for (x, y, color) in indices.iter() {
+        for (x, y, color) in strategy.iter() {
             canvas.set_pixel(Vec2 { x: *x, y: *y }, color)?;
         }
 
