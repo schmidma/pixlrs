@@ -5,11 +5,14 @@ use std::{
 
 use image::Rgb;
 
-use crate::protocol::{to_ascii_command, PixelFlut, Vec2};
+use crate::pixelflut::{
+    parse_color_from_ascii, parse_size_from_ascii, to_ascii_command, PixelFlut, Vec2,
+};
 
 pub struct StdTcpProtocol {
     reader: BufReader<TcpStream>,
     writer: BufWriter<TcpStream>,
+    offset: Vec2,
 }
 
 impl StdTcpProtocol {
@@ -17,12 +20,16 @@ impl StdTcpProtocol {
         let stream = TcpStream::connect(address)?;
         let reader = BufReader::new(stream.try_clone()?);
         let writer = BufWriter::new(stream);
-        Ok(Self { reader, writer })
+        Ok(Self {
+            reader,
+            writer,
+            offset: Vec2::default(),
+        })
     }
 }
 
 impl PixelFlut for StdTcpProtocol {
-    type Error = std::io::Error;
+    type Error = color_eyre::eyre::Error;
 
     fn get_pixel(&mut self, position: Vec2) -> Result<Rgb<u8>, Self::Error> {
         let command_string = format!("PX {} {}\n", position.x, position.y);
@@ -30,16 +37,14 @@ impl PixelFlut for StdTcpProtocol {
         self.writer.flush()?;
         let mut buffer = String::new();
         self.reader.read_line(&mut buffer)?;
-        let color: Vec<_> = buffer.split_whitespace().collect();
-        let r = color[3].parse().unwrap();
-        let g = color[4].parse().unwrap();
-        let b = color[5].parse().unwrap();
-        Ok(Rgb([r, g, b]))
+        Ok(parse_color_from_ascii(&buffer)?)
     }
 
     fn set_pixel(&mut self, position: Vec2, color: &Rgb<u8>) -> Result<(), Self::Error> {
+        let position = position + self.offset;
         let command_string = to_ascii_command(position, color);
-        self.writer.write_all(command_string.as_bytes())
+        self.writer.write_all(command_string.as_bytes())?;
+        Ok(())
     }
 
     fn get_size(&mut self) -> Result<Vec2, Self::Error> {
@@ -47,9 +52,11 @@ impl PixelFlut for StdTcpProtocol {
         self.writer.flush()?;
         let mut buffer = String::new();
         self.reader.read_line(&mut buffer)?;
-        let size: Vec<_> = buffer.split_whitespace().collect();
-        let x = size[1].parse().unwrap();
-        let y = size[2].parse().unwrap();
-        Ok(Vec2 { x, y })
+        Ok(parse_size_from_ascii(&buffer)?)
+    }
+
+    fn set_offset(&mut self, offset: Vec2) -> Result<(), Self::Error> {
+        self.offset = offset;
+        Ok(())
     }
 }

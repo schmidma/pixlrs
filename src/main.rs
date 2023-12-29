@@ -3,22 +3,22 @@ use std::{
     time::{Duration, Instant},
 };
 
-use canvas::Canvas;
 use clap::Parser;
 use color_eyre::{eyre::Context, Result};
 use image::io::Reader as ImageReader;
-use protocol::Vec2;
+use pixelflut::Vec2;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use crate::{
-    fps_counter::AveragingFpsCounter, shuffle_and_loop::ShuffleAndLoop,
-    std_tcp_protocol::StdTcpProtocol,
+    fps_counter::AveragingFpsCounter, multi_threaded::AsyncMultiThreadedProtocol,
+    pixelflut::PixelFlut, shuffle_and_loop::ShuffleAndLoop, std_tcp_protocol::StdTcpProtocol,
 };
 
-mod canvas;
+mod async_protocol;
 mod fps_counter;
-mod protocol;
+mod multi_threaded;
+mod pixelflut;
 mod shuffle_and_loop;
 mod std_tcp_protocol;
 
@@ -46,20 +46,19 @@ fn main() -> Result<()> {
 
     let server_address = format!("{}:{}", arguments.host, arguments.port);
     info!("connecting to pixelflut server at {} ...", server_address);
-    let protocol =
+    let mut canvas =
         StdTcpProtocol::new(server_address).wrap_err("failed to connect to pixelflut server")?;
     info!("connected to pixelflut server");
 
-    let offset = Vec2::default();
-    let mut canvas = Canvas::new(protocol, offset).wrap_err("failed to create canvas")?;
-
-    let size = canvas.size().wrap_err("failed to get canvas size")?;
+    let size = canvas.get_size().wrap_err("failed to get canvas size")?;
     info!("canvas size is {:?}", size);
     let offset = Vec2 {
         x: size.x.saturating_sub(image.width()),
         y: size.y.saturating_sub(image.height()),
     };
-    canvas.offset = offset;
+    canvas
+        .set_offset(offset)
+        .wrap_err("failed to set canvas offset")?;
     info!("set canvas offset to {:?}", offset);
 
     let strategy = ShuffleAndLoop::new(&image);
