@@ -11,13 +11,11 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use crate::{
-    fps_counter::AveragingFpsCounter, multi_threaded::AsyncMultiThreadedProtocol,
-    pixelflut::PixelFlut, shuffle_and_loop::ShuffleAndLoop, std_tcp_protocol::StdTcpProtocol,
+    fps_counter::AveragingFpsCounter, pixelflut::PixelFlut, shuffle_and_loop::ShuffleAndLoop,
+    std_tcp_protocol::StdTcpProtocol,
 };
 
-mod async_protocol;
 mod fps_counter;
-mod multi_threaded;
 mod pixelflut;
 mod shuffle_and_loop;
 mod std_tcp_protocol;
